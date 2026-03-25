@@ -48,6 +48,44 @@ GMAIL_DRAFT_USERS = {
     "hiroki-matsubara@salesnow.jp",
 }
 
+# 担当者別メール署名
+EMAIL_SIGNATURES = {
+    "yuki-okayasu@salesnow.jp": (
+        "\n\n====================================\n"
+        "株式会社SalesNow\n"
+        "岡安 勇樹（おかやす ゆうき）\n"
+        "AI搭載 企業データベースクラウド『SalesNow』\n"
+        "業界最大級の企業データベースメディア『SalesNow DB』\n"
+        "===================================="
+    ),
+    "tomoya-takeuchi@salesnow.jp": (
+        "\n\n====================================\n"
+        "株式会社SalesNow\n"
+        "竹内 智康 (たけうち ともや）\n"
+        "TEL：050-1782-7611\n"
+        "Email：tomoya-takeuchi@salesnow.jp\n"
+        "AI搭載 企業データベースクラウド『SalesNow』\n"
+        "業界最大級の企業データベースメディア『SalesNow DB』\n"
+        "===================================="
+    ),
+    "shinya-ohno@salesnow.jp": (
+        "\n\n===========================================\n"
+        "株式会社SalesNow\n"
+        "〒150-6207 東京都渋谷区桜丘町1-4　渋谷サクラステージ\n"
+        "SHIBUYAサイド SHIBUYAタワー7F\n"
+        "----------------------------------------------------------------------\n"
+        "アカウントディベロップメントG\n"
+        "大野 晋也（Shniya Ohno）\n"
+        "\n"
+        "TEL ：070-6645-8278\n"
+        "Email：shinya-ohno@salesnow.jp\n"
+        "------------------------------------------------------------------------\n"
+        "セールスチームの武器となるデータベース『SalesNow』\n"
+        "日本最大級の企業データベースメディア『SalesNow DB』\n"
+        "==========================================="
+    ),
+}
+
 # 処理済みTask IDの記録ファイル（重複処理防止）
 PROCESSED_FILE = Path(__file__).parent / ".inbound_followup_processed.json"
 
@@ -351,6 +389,11 @@ def create_gmail_draft(lead, analysis, caller_email=None):
     service = get_gmail_service(caller_email)
     if not service:
         return False
+
+    # 担当者別署名を追加
+    signature = EMAIL_SIGNATURES.get(caller_email, "")
+    if signature:
+        body += signature
 
     msg = EmailMIMEText(body, "plain", "utf-8")
     msg["to"] = lead["email"]

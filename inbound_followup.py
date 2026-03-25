@@ -568,7 +568,7 @@ def main():
     # 自動実行時は平日9-19時のみ（手動指定時はスキップ）
     if not lead_id and not dry_run:
         now = datetime.now()
-        if now.weekday() >= 5 or now.hour < 9 or now.hour >= 19:
+        if now.weekday() >= 5 or now.hour < 8 or now.hour >= 20:
             return
 
     mode = "ドライラン" if dry_run else "実行"

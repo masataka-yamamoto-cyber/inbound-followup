@@ -2,8 +2,9 @@ name: Inbound Followup
 
 on:
   schedule:
-    # 平日 9:00-18:55 JST (= 0:00-9:55 UTC) に5分おき
-    - cron: '*/5 0-9 * * 1-5'
+    # 平日 8:00-19:55 JST (= 23:00-10:55 UTC) に5分おき
+    - cron: '*/5 23 * * 0-4'
+    - cron: '*/5 0-10 * * 1-5'
   workflow_dispatch: # 手動実行も可能
 
 jobs:

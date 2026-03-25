@@ -25,16 +25,11 @@ jobs:
         run: |
           npm install -g @salesforce/cli
 
-      - name: Authenticate Salesforce (JWT)
+      - name: Authenticate Salesforce
         run: |
-          echo "${{ secrets.SF_SERVER_KEY }}" > /tmp/server.key
-          sf org login jwt \
-            --client-id "${{ secrets.SF_CLIENT_ID }}" \
-            --jwt-key-file /tmp/server.key \
-            --username "${{ secrets.SF_USERNAME }}" \
-            --instance-url https://salesnow-jp.my.salesforce.com \
-            --alias prod
-          rm /tmp/server.key
+          echo "${{ secrets.SFDX_AUTH_URL }}" > /tmp/authurl.txt
+          sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default
+          rm /tmp/authurl.txt
 
       - name: Set up Gmail credentials
         run: |

@@ -1,0 +1,49 @@
+name: Inbound Followup
+
+on:
+  schedule:
+    # 平日 9:00-18:55 JST (= 0:00-9:55 UTC) に5分おき
+    - cron: '*/5 0-9 * * 1-5'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install slack_sdk google-auth google-api-python-client
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli
+
+      - name: Authenticate Salesforce (JWT)
+        run: |
+          echo "${{ secrets.SF_SERVER_KEY }}" > /tmp/server.key
+          sf org login jwt \
+            --client-id "${{ secrets.SF_CLIENT_ID }}" \
+            --jwt-key-file /tmp/server.key \
+            --username "${{ secrets.SF_USERNAME }}" \
+            --instance-url https://salesnow-jp.my.salesforce.com \
+            --alias prod
+          rm /tmp/server.key
+
+      - name: Set up Gmail credentials
+        run: |
+          mkdir -p .gmail_credentials
+          echo '${{ secrets.GMAIL_SERVICE_ACCOUNT_JSON }}' > .gmail_credentials/service_account.json
+
+      - name: Run script
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          python inbound_followup.py --execute

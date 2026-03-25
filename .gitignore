@@ -1,0 +1,4 @@
+.gmail_credentials/
+.inbound_followup_processed.json
+*.key
+__pycache__/

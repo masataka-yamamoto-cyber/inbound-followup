@@ -253,14 +253,14 @@ def analyze_call_log(lead, tasks):
         response_text = body["choices"][0]["message"]["content"].strip()
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Groq API タイムアウト: {lead['company']}")
-        return _error_result("タイムアウト")
+        return _error_result("タイムアウト", lead, caller_last_name)
     except Exception as e:
         print(f"[ERROR] Groq API エラー: {lead['company']} - {e}")
-        return _error_result(str(e)[:200])
+        return _error_result(str(e)[:200], lead, caller_last_name)
 
     if not response_text:
         print(f"[WARN] Groq API 空レスポンス: {lead['company']}")
-        return _error_result("空レスポンス")
+        return _error_result("空レスポンス", lead, caller_last_name)
 
     # コードブロックが含まれている場合は除去
     if response_text.startswith("```"):
@@ -273,16 +273,35 @@ def analyze_call_log(lead, tasks):
         return json.loads(response_text)
     except json.JSONDecodeError:
         print(f"[WARN] JSON parse failed for lead {lead['id']}: {response_text[:200]}")
-        return _error_result(response_text[:200])
+        return _error_result(response_text[:200], lead, caller_last_name)
 
 
-def _error_result(summary):
+def _error_result(summary, lead=None, caller_last_name=None):
+    last_name = (lead or {}).get("last_name", "")
+    c_last = caller_last_name or SENDER_NAME
+    email_body = ""
+    if last_name:
+        email_body = (
+            f"{last_name}様\n\n"
+            f"お世話になっております。\n"
+            f"株式会社SalesNowの{c_last}でございます。\n\n"
+            f"先ほどはお電話を差し上げましたが、ご不在のようでしたのでメールにてご連絡いたしました。\n\n"
+            f"{last_name}様が現在お感じになられている営業活動やターゲティングに関する課題感に沿って、\n"
+            f"お力になれる部分があればぜひご案内させていただければと思いご連絡いたしました。\n\n"
+            f"弊社SalesNowは、全国580万社以上の企業データベースを活用し、ターゲット企業の選定からアプローチの優先順位付けまでを支援する企業データベースです。\n"
+            f"部署直通の電話番号やキーマン情報などもご活用いただけるため、営業活動の効率化に多くの企業様にご活用いただいております。\n\n"
+            f"もしよろしければ、オンラインでのお打ち合わせで貴社の状況に合わせたご提案をさせていただければ幸いです。\n"
+            f"下記より、ご都合のよろしい日時をお選びいただけますと幸いです。\n"
+            f"https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/5jKI5ibsK4niAlxb1iQux/confirm\n\n"
+            f"ご不明な点がございましたら、お気軽にご返信くださいませ。\n"
+            f"何卒よろしくお願いいたします。"
+        )
     return {
-        "category": "分析エラー",
+        "category": "留守電",
         "summary": summary,
         "no_appt_reason": None,
-        "email_subject": "",
-        "email_body": "",
+        "email_subject": f"【先ほどのお電話のお礼】{SENDER_COMPANY} {c_last}" if last_name else "",
+        "email_body": email_body,
     }
 
 

@@ -708,6 +708,25 @@ def main():
         analysis = analyze_call_log(lead, tasks)
         category = analysis.get("category", "不明")
 
+        # 日程調整完了の場合はテンプレートで上書き
+        if category == CATEGORY_APPOINTMENT:
+            caller_name = tasks[0].get("owner_name", "") if tasks else ""
+            c_last = caller_name.split()[0] if caller_name else SENDER_NAME
+            analysis["email_subject"] = "次回お打ち合わせの詳細"
+            analysis["email_body"] = (
+                f"{lead['last_name']}様\n\n"
+                f"お世話になっております。\n"
+                f"株式会社SalesNowの{c_last}でございます。\n\n"
+                f"先ほどはお電話にてありがとうございました。\n"
+                f"早速ですが、お打ち合わせ当日の詳細を送付いたします。\n\n"
+                f"■お打ち合わせ詳細\n"
+                f"日時：\n"
+                f"URL：\n\n"
+                f"※万が一、都合が悪くなってしまった際は、以下URLより代替日のご登録をお願いいたします。\n"
+                f"https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/ltKFNrejb9TJO_70dDTO8/confirm\n\n"
+                f"\n当日も何卒よろしくお願いいたします。"
+            )
+
         if category in results:
             results[category] += 1
 

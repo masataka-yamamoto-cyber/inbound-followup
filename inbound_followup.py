@@ -698,6 +698,12 @@ def main():
                 handle_not_called(lead, dry_run)
             continue
 
+        # 本日作成されたTaskのみに絞る（過去の架電は対象外）
+        today_str = date.today().isoformat()
+        tasks = [t for t in tasks if t.get("created_date", "").startswith(today_str)]
+        if not tasks:
+            continue
+
         # 処理済みチェック：最新のTask IDが処理済みならスキップ
         latest_task_id = tasks[0]["id"]
         if latest_task_id in processed and not lead_id:

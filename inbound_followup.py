@@ -437,13 +437,17 @@ def create_gmail_draft(lead, analysis, caller_email=None):
 
 # ── Slack投稿 ─────────────────────────────────────────
 
-def post_to_slack(lead, analysis, dry_run=True):
+def post_to_slack(lead, analysis, caller_email=None, dry_run=True):
     """親メッセージに会社名・名前・着地情報、スレッドにメール文面を投稿"""
     category = analysis.get("category", "不明")
     summary = analysis.get("summary", "")
     reason = analysis.get("no_appt_reason")
     subject = analysis.get("email_subject", "")
     body = analysis.get("email_body", "")
+
+    # 署名を付与（Gmailと同じ内容をSlackにも表示）
+    signature = EMAIL_SIGNATURES.get(caller_email or "", "")
+    full_body = body + signature if signature else body
 
     sf_url = f"https://salesnow-jp.lightning.force.com/lightning/r/Lead/{lead['id']}/view"
 
@@ -489,8 +493,8 @@ def post_to_slack(lead, analysis, dry_run=True):
     })
     thread_blocks.append({"type": "divider"})
 
-    # メール下書き
-    email_text = f"*件名：{subject}*\n\n{body}"
+    # メール下書き（件名 + 本文 + 署名のフル文面）
+    email_text = f"*件名：{subject}*\n━━━━━━━━━━━━━━━━━━━━\n\n{full_body}"
     if len(email_text) > 2900:
         email_text = email_text[:2900] + "..."
     thread_blocks.append({
@@ -744,11 +748,11 @@ def main():
         if category in results:
             results[category] += 1
 
-        success = post_to_slack(lead, analysis, dry_run)
+        caller_email = tasks[0].get("owner_email", "") if tasks else ""
+        success = post_to_slack(lead, analysis, caller_email=caller_email, dry_run=dry_run)
 
         # Gmail下書き作成（実行モードかつ対象ユーザーの場合のみ）
         if not dry_run:
-            caller_email = tasks[0].get("owner_email", "") if tasks else ""
             if caller_email and caller_email in GMAIL_DRAFT_USERS:
                 create_gmail_draft(lead, analysis, caller_email=caller_email)
             elif caller_email:

@@ -110,6 +110,34 @@ CATEGORY_APPOINTMENT = "日程調整完了"
 CATEGORY_CONNECTED_NO_APPT = "通電・未アポ"
 CATEGORY_NOT_CALLED = "未架電"
 
+# === SalesNow Lite 定型文面 ===
+SALESNOW_LITE_BLOCK = (
+    "\n\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "■ SalesNow Lite とは？\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "月額なし・1件50円から、SalesNowのデータを\n"
+    "スポットでご利用いただけるプランです。\n"
+    "\n"
+    "「まずデータの精度を確認したい」\n"
+    "「特定のプロジェクトだけリストが必要」\n"
+    "\n"
+    "そうした場面でお使いいただけます。\n"
+    "\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "■ 主な特徴\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "✓ 580万社以上のデータベース（国内法人100%網羅）\n"
+    "✓ 業種・規模・地域・売上など細かい条件での絞り込みが可能\n"
+    "✓ クレジットカード決済で、5分で利用開始\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "▼ SalesNow Lite の詳細はこちら\n"
+    "https://top.salesnow.jp/lite/\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+)
+
 
 # ── Salesforce クエリ ──────────────────────────────────────
 
@@ -258,27 +286,32 @@ def analyze_call_log(lead, tasks):
 
 2. **通話ログ要約**: 1-2文で要約
 
-3. **メール下書き**: 着地分類に応じたメール文面を生成
+3. **SalesNow Lite提案フラグ**: 通話ログの中でSalesNow Liteの提案・案内・紹介をしていた場合は true、していなければ false
+
+4. **メール下書き**: 着地分類に応じたメール文面を生成
    - 留守電の場合: お電話した旨 + 日程調整リンク（{SPIR_URL}）を案内
    - 日程調整完了の場合: 日時確認 + Google Meet案内のアポ確定メール
    - 通電・未アポの場合: 通話のお礼 + 未アポ理由の分析 + 次アクション提案
 
-4. **未アポ理由**（通電・未アポの場合のみ）: なぜ日程調整に至らなかったか分析
+5. **未アポ理由**（通電・未アポの場合のみ）: なぜ日程調整に至らなかったか分析
 
 ## 回答フォーマット（JSON）
 {{
   "category": "留守電 | 日程調整完了 | 通電・未アポ",
   "summary": "通話ログの要約",
+  "lite_proposed": true | false,
   "no_appt_reason": "未アポの理由（該当する場合のみ、それ以外はnull）",
   "email_subject": "【先ほどのお電話のお礼】{SENDER_COMPANY} {caller_last_name}",
   "email_body": "メールの本文（{lead['last_name']}様 宛、差出人は{SENDER_COMPANY}の{caller_last_name}）"
 }}
 
 重要:
+- 「セールスナウ」「Salesnow」等の表記は絶対に使わず、必ず「SalesNow」と表記してください
 - メール件名は必ず「【先ほどのお電話のお礼】{SENDER_COMPANY} {caller_last_name}」にしてください
 - メール文面は丁寧かつ簡潔に
 - 流入経路に応じてデモ案内や資料フォローを含める
 - JSONのみ回答してください（マークダウンのコードブロック不要）
+- SalesNow Liteの文面はemail_bodyに含めないでください（後工程で自動付与します）
 - **メール本文のフォーマットは以下の構造を厳守してください**:
   - 冒頭の宛名（{lead['last_name']}様）の後に必ず空行を入れる
   - 「お世話になっております。」の挨拶ブロックの後に空行を入れる
@@ -744,6 +777,10 @@ def main():
                 f"https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/ltKFNrejb9TJO_70dDTO8/confirm\n\n"
                 f"\n当日も何卒よろしくお願いいたします。"
             )
+
+        # SalesNow Lite提案時は定型文面を本文末尾に付与
+        if analysis.get("lite_proposed"):
+            analysis["email_body"] = analysis.get("email_body", "") + SALESNOW_LITE_BLOCK
 
         if category in results:
             results[category] += 1

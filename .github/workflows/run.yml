@@ -1,10 +1,8 @@
 name: Inbound Followup
 
 on:
-  schedule:
-    # 平日 8:00-19:55 JST (= 23:00-10:55 UTC) に5分おき
-    - cron: '*/5 23 * * 0-4'
-    - cron: '*/5 0-10 * * 1-5'
+  repository_dispatch:
+    types: [salesforce-task-created]
   workflow_dispatch: # 手動実行も可能
 
 jobs:
@@ -41,5 +39,10 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          TASK_LEAD_ID: ${{ github.event.client_payload.lead_id }}
         run: |
-          python inbound_followup.py --execute
+          if [ -n "$TASK_LEAD_ID" ]; then
+            python inbound_followup.py --execute --lead-id "$TASK_LEAD_ID"
+          else
+            python inbound_followup.py --execute
+          fi

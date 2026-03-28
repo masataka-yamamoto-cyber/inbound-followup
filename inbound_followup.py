@@ -677,15 +677,27 @@ def mark_processed(processed, task_ids):
 def main():
     # 引数パース
     lead_id = None
+    task_id = None
     dry_run = True
 
-    for arg in sys.argv[1:]:
-        if arg.startswith("--lead-id="):
-            lead_id = arg.split("=", 1)[1]
-        elif arg == "--execute":
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i].startswith("--lead-id="):
+            lead_id = args[i].split("=", 1)[1]
+        elif args[i] == "--lead-id" and i + 1 < len(args):
+            i += 1
+            lead_id = args[i]
+        elif args[i].startswith("--task-id="):
+            task_id = args[i].split("=", 1)[1]
+        elif args[i] == "--task-id" and i + 1 < len(args):
+            i += 1
+            task_id = args[i]
+        elif args[i] == "--execute":
             dry_run = False
-        elif arg == "--dry-run":
+        elif args[i] == "--dry-run":
             dry_run = True
+        i += 1
 
     # 自動実行時は平日9-19時のみ（手動指定時はスキップ）
     if not lead_id and not dry_run:
@@ -743,16 +755,25 @@ def main():
                 handle_not_called(lead, dry_run)
             continue
 
-        # 本日作成されたTaskのみに絞る（過去の架電は対象外）
-        today_str = date.today().isoformat()
-        tasks = [t for t in tasks if t.get("created_date", "").startswith(today_str)]
-        if not tasks:
-            continue
-
-        # 処理済みチェック：最新のTask IDが処理済みならスキップ
-        latest_task_id = tasks[0]["id"]
-        if latest_task_id in processed and not lead_id:
-            continue
+        # task_id指定時：そのTask 1件のみに絞る
+        if task_id:
+            tasks = [t for t in tasks if t["id"] == task_id]
+            if not tasks:
+                continue
+            # 処理済みならスキップ（1活動履歴 = 1下書きを厳守）
+            if task_id in processed:
+                print(f"[SKIP] Task {task_id} は処理済みです: {lead['company']}")
+                continue
+        else:
+            # 本日作成されたTaskのみに絞る（過去の架電は対象外）
+            today_str = date.today().isoformat()
+            tasks = [t for t in tasks if t.get("created_date", "").startswith(today_str)]
+            if not tasks:
+                continue
+            # 処理済みチェック：最新のTask IDが処理済みならスキップ
+            latest_task_id = tasks[0]["id"]
+            if latest_task_id in processed:
+                continue
 
         # AI分析
         print(f"🤖 分析中: {lead['company']}（{lead['name']}）...")

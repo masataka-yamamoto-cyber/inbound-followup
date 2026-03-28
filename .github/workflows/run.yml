@@ -40,8 +40,11 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           TASK_LEAD_ID: ${{ github.event.client_payload.lead_id }}
+          TASK_ID: ${{ github.event.client_payload.task_id }}
         run: |
-          if [ -n "$TASK_LEAD_ID" ]; then
+          if [ -n "$TASK_ID" ] && [ -n "$TASK_LEAD_ID" ]; then
+            python inbound_followup.py --execute --lead-id "$TASK_LEAD_ID" --task-id "$TASK_ID"
+          elif [ -n "$TASK_LEAD_ID" ]; then
             python inbound_followup.py --execute --lead-id "$TASK_LEAD_ID"
           else
             python inbound_followup.py --execute

@@ -347,14 +347,14 @@ def analyze_call_log(lead, tasks):
         response_text = body["choices"][0]["message"]["content"].strip()
     except subprocess.TimeoutExpired:
         print(f"[ERROR] Groq API タイムアウト: {lead['company']}")
-        return _error_result("タイムアウト", lead, caller_last_name)
+        return None
     except Exception as e:
         print(f"[ERROR] Groq API エラー: {lead['company']} - {e}")
-        return _error_result(str(e)[:200], lead, caller_last_name)
+        return None
 
     if not response_text:
         print(f"[WARN] Groq API 空レスポンス: {lead['company']}")
-        return _error_result("空レスポンス", lead, caller_last_name)
+        return None
 
     # コードブロックが含まれている場合は除去
     if response_text.startswith("```"):
@@ -367,7 +367,7 @@ def analyze_call_log(lead, tasks):
         return json.loads(response_text)
     except json.JSONDecodeError:
         print(f"[WARN] JSON parse failed for lead {lead['id']}: {response_text[:200]}")
-        return _error_result(response_text[:200], lead, caller_last_name)
+        return None
 
 
 def _error_result(summary, lead=None, caller_last_name=None):
@@ -782,6 +782,9 @@ def main():
         # AI分析
         print(f"🤖 分析中: {lead['company']}（{lead['name']}）...")
         analysis = analyze_call_log(lead, tasks)
+        if analysis is None:
+            print(f"[SKIP] AI分析失敗のためスキップ: {lead['company']}（{lead['name']}）")
+            continue
         category = analysis.get("category", "不明")
 
         # 日程調整完了の場合はテンプレートで上書き

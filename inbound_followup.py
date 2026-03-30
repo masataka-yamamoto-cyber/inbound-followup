@@ -27,7 +27,7 @@ from pathlib import Path
 
 # === 設定 ===
 SF_TARGET_ORG = "prod"
-SLACK_CHANNEL_ID = "C084D5RA1C7"
+SLACK_CHANNEL_ID = "C0AQF82TFT2"
 SPIR_URL = "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/ltKFNrejb9TJO_70dDTO8/confirm"
 SENDER_NAME = "小和瀬"
 SENDER_COMPANY = "株式会社SalesNow"

@@ -760,6 +760,10 @@ def main():
             tasks = [t for t in tasks if t["id"] == task_id]
             if not tasks:
                 continue
+            # amptalk架電記録のみ対象（手動メモ等は除外）
+            if not tasks[0].get("subject", "").startswith("amptalk Zoom Phone:"):
+                print(f"[SKIP] amptalk架電記録ではありません: {tasks[0].get('subject', '')}")
+                continue
             # 処理済みならスキップ（1活動履歴 = 1下書きを厳守）
             if task_id in processed:
                 print(f"[SKIP] Task {task_id} は処理済みです: {lead['company']}")

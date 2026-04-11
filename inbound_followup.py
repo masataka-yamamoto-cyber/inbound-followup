@@ -149,69 +149,84 @@ SALESNOW_LITE_BLOCK = (
 )
 
 
-# ── Slack AE振分取得 ──────────────────────────────────────
+# ── AE振分ロジック ──────────────────────────────────────
 
-def fetch_ae_from_slack(lead_email):
-    """SlackのAE振分投稿からリードの担当AE名を取得"""
-    import re
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
-    if not token or not lead_email:
-        return None
+# SalesNow連携フィールド名（Lead上）
+SN_INDUSTRY_FIELD = "qw_snpf__sn_industry_name__c"
+SN_EMPLOYEE_FIELD = "qw_snpf__sn_employee_number__c"
+SN_LISTING_FIELD = "qw_snpf__sn_listing_category_new__c"
 
-    # Slack検索でリードのメールアドレスを含む投稿を探す
+
+def determine_ae(lead_source, company_attrs):
+    """AE振分ルール（上から順に判定、最初に該当した行で確定）"""
+    if not company_attrs:
+        return "中嶋"  # デフォルト
+
+    industry = company_attrs.get("large_industry", "") or ""
     try:
-        search_url = "https://slack.com/api/search.messages"
-        search_params = urllib.parse.urlencode({
-            "query": lead_email,
-            "sort": "timestamp",
-            "sort_dir": "desc",
-            "count": 5,
-        })
-        req = urllib.request.Request(
-            f"{search_url}?{search_params}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        emp = int(company_attrs.get("employee_count") or 0)
+    except (ValueError, TypeError):
+        emp = 0
+    listing = company_attrs.get("listing", "") or ""
 
-        messages = data.get("messages", {}).get("matches", [])
-        if not messages:
-            return None
+    # 1. 紹介 or 掘り起こし → 粂
+    if lead_source in ("in_referral", "out_referral"):
+        return "粂"
 
-        # 親投稿のchannel + tsを取得してスレッドを読む
-        for msg in messages:
-            channel_id = msg.get("channel", {}).get("id", "")
-            msg_ts = msg.get("ts", "")
-            if not channel_id or not msg_ts:
-                continue
+    # 2. 製造 / 機械 / 工事・土木 → 小島
+    if industry in ("製造", "機械", "工事・土木"):
+        return "小島"
 
-            # スレッドのリプライを取得
-            replies_url = "https://slack.com/api/conversations.replies"
-            replies_params = urllib.parse.urlencode({
-                "channel": channel_id,
-                "ts": msg_ts,
-                "limit": 10,
-            })
-            req2 = urllib.request.Request(
-                f"{replies_url}?{replies_params}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with urllib.request.urlopen(req2, timeout=15) as resp2:
-                replies_data = json.loads(resp2.read().decode("utf-8"))
+    # 3. out_event / corp_form → 小島
+    if lead_source in ("out_event", "corp_form"):
+        return "小島"
 
-            for reply in replies_data.get("messages", []):
-                text = reply.get("text", "")
-                # 「【AE振分】中嶋」のパターンを検出
-                match = re.search(r"【AE振分】(\S+)", text)
-                if match:
-                    ae_name = match.group(1)
-                    print(f"[INFO] AE振分検出: {ae_name}（{lead_email}）")
-                    return ae_name
+    # 4. 広告・制作 / 金融 → 中嶋
+    if industry in ("広告・制作", "金融"):
+        return "中嶋"
 
-    except Exception as e:
-        print(f"[WARN] Slack AE振分取得エラー: {e}")
+    # 5. グロース上場 → 中嶋
+    if "グロース" in listing:
+        return "中嶋"
 
-    return None
+    # 6. 従業員10,000人以上 → 粂
+    if emp >= 10000:
+        return "粂"
+
+    # 7. 従業員3,000〜10,000人 → 粂
+    if 3000 <= emp < 10000:
+        return "粂"
+
+    # 8. 従業員20〜50人 → 中嶋
+    if 20 <= emp < 50:
+        return "中嶋"
+
+    # 9. 従業員300〜1,000人 → 中嶋
+    if 300 <= emp < 1000:
+        return "中嶋"
+
+    # 10. 人材業界 → 中嶋（粂の枠管理は省略、中嶋をデフォルト）
+    if "人材" in industry:
+        return "中嶋"
+
+    # 11. コンサル → 中嶋
+    if "コンサル" in industry:
+        return "中嶋"
+
+    # 12. IT × 300〜1,000人 → 中嶋
+    if "IT" in industry and 300 <= emp < 1000:
+        return "中嶋"
+
+    # 13. IT × 50〜300人 → 石川
+    if "IT" in industry and 50 <= emp < 300:
+        return "石川"
+
+    # 14. 従業員1,000〜3,000人（IT以外） → 石川
+    if 1000 <= emp < 3000 and "IT" not in industry:
+        return "石川"
+
+    # デフォルト → 中嶋
+    return "中嶋"
 
 
 def get_ae_spir_url(ae_name):
@@ -256,14 +271,16 @@ def fetch_leads(lead_id=None):
     if lead_id:
         soql = (
             f"SELECT Id, Name, FirstName, LastName, Email, Phone, Company, "
-            f"LeadSource, CreatedDate, Status "
+            f"LeadSource, CreatedDate, Status, "
+            f"{SN_INDUSTRY_FIELD}, {SN_EMPLOYEE_FIELD}, {SN_LISTING_FIELD} "
             f"FROM Lead WHERE Id = '{lead_id}'"
         )
     else:
         sources = ", ".join(f"'{s}'" for s in LEAD_SOURCES)
         soql = (
             f"SELECT Id, Name, FirstName, LastName, Email, Phone, Company, "
-            f"LeadSource, CreatedDate, Status "
+            f"LeadSource, CreatedDate, Status, "
+            f"{SN_INDUSTRY_FIELD}, {SN_EMPLOYEE_FIELD}, {SN_LISTING_FIELD} "
             f"FROM Lead "
             f"WHERE CreatedDate = LAST_N_DAYS:{LOOKBACK_DAYS} "
             f"AND LeadSource IN ({sources}) "
@@ -288,6 +305,9 @@ def fetch_leads_raw(soql):
             "lead_source": r.get("LeadSource", ""),
             "created_date": r.get("CreatedDate", ""),
             "status": r.get("Status", ""),
+            "sn_industry": r.get(SN_INDUSTRY_FIELD, ""),
+            "sn_employee_count": r.get(SN_EMPLOYEE_FIELD),
+            "sn_listing": r.get(SN_LISTING_FIELD, ""),
         })
     return leads
 
@@ -873,10 +893,15 @@ def main():
         if category == CATEGORY_VOICEMAIL:
             caller_name = tasks[0].get("owner_name", "") if tasks else ""
             c_last = caller_name.split()[0] if caller_name else SENDER_NAME
-            # SlackからAE振分結果を取得
-            ae_name = fetch_ae_from_slack(lead.get("email", ""))
+            # Salesforce上のSalesNow連携フィールドでAE振分判定
+            company_attrs = {
+                "large_industry": lead.get("sn_industry", "") or "",
+                "employee_count": lead.get("sn_employee_count") or 0,
+                "listing": lead.get("sn_listing", "") or "",
+            }
+            ae_name = determine_ae(lead.get("lead_source", ""), company_attrs)
             ae_spir_url = get_ae_spir_url(ae_name)
-            ae_info = f"（AE: {ae_name}）" if ae_name else "（AE: 未特定・中嶋デフォルト）"
+            ae_info = f"（AE: {ae_name}）"
             print(f"[INFO] 留守電テンプレート適用 {ae_info}")
             analysis["email_subject"] = f"【先ほどのお電話のお礼】株式会社SalesNow {c_last}"
             analysis["email_body"] = (

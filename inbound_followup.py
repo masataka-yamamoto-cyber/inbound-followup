@@ -22,6 +22,7 @@ import sys
 import os
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime, date
 from pathlib import Path
 
@@ -101,6 +102,15 @@ EMAIL_SIGNATURES = {
     ),
 }
 
+# AE別 Spir URL
+AE_SPIR_URLS = {
+    "中嶋": "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/ltKFNrejb9TJO_70dDTO8/confirm",
+    "粂": "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/lwPdqDw83gx42zYTR1Drz/confirm",
+    "小島": "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/MMuDqI1FeV8vMhLXk8o4s/confirm",
+    "石川": "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/mB5iLVPl0qPdof7wVBYMm/confirm",
+}
+AE_SPIR_DEFAULT = "https://app.spirinc.com/t/uiTqW2_1OZRpnsmbBahd5/as/ltKFNrejb9TJO_70dDTO8/confirm"
+
 # 処理済みTask IDの記録ファイル（重複処理防止）
 PROCESSED_FILE = Path(__file__).parent / ".inbound_followup_processed.json"
 
@@ -137,6 +147,78 @@ SALESNOW_LITE_BLOCK = (
     "https://top.salesnow.jp/lite/\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
+
+
+# ── Slack AE振分取得 ──────────────────────────────────────
+
+def fetch_ae_from_slack(lead_email):
+    """SlackのAE振分投稿からリードの担当AE名を取得"""
+    import re
+    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    if not token or not lead_email:
+        return None
+
+    # Slack検索でリードのメールアドレスを含む投稿を探す
+    try:
+        search_url = "https://slack.com/api/search.messages"
+        search_params = urllib.parse.urlencode({
+            "query": lead_email,
+            "sort": "timestamp",
+            "sort_dir": "desc",
+            "count": 5,
+        })
+        req = urllib.request.Request(
+            f"{search_url}?{search_params}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        messages = data.get("messages", {}).get("matches", [])
+        if not messages:
+            return None
+
+        # 親投稿のchannel + tsを取得してスレッドを読む
+        for msg in messages:
+            channel_id = msg.get("channel", {}).get("id", "")
+            msg_ts = msg.get("ts", "")
+            if not channel_id or not msg_ts:
+                continue
+
+            # スレッドのリプライを取得
+            replies_url = "https://slack.com/api/conversations.replies"
+            replies_params = urllib.parse.urlencode({
+                "channel": channel_id,
+                "ts": msg_ts,
+                "limit": 10,
+            })
+            req2 = urllib.request.Request(
+                f"{replies_url}?{replies_params}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req2, timeout=15) as resp2:
+                replies_data = json.loads(resp2.read().decode("utf-8"))
+
+            for reply in replies_data.get("messages", []):
+                text = reply.get("text", "")
+                # 「【AE振分】中嶋」のパターンを検出
+                match = re.search(r"【AE振分】(\S+)", text)
+                if match:
+                    ae_name = match.group(1)
+                    print(f"[INFO] AE振分検出: {ae_name}（{lead_email}）")
+                    return ae_name
+
+    except Exception as e:
+        print(f"[WARN] Slack AE振分取得エラー: {e}")
+
+    return None
+
+
+def get_ae_spir_url(ae_name):
+    """AE名からSpir URLを返す"""
+    if ae_name:
+        return AE_SPIR_URLS.get(ae_name, AE_SPIR_DEFAULT)
+    return AE_SPIR_DEFAULT
 
 
 # ── Salesforce クエリ ──────────────────────────────────────
@@ -786,6 +868,46 @@ def main():
             print(f"[SKIP] AI分析失敗のためスキップ: {lead['company']}（{lead['name']}）")
             continue
         category = analysis.get("category", "不明")
+
+        # 留守電の場合はテンプレートで上書き（AEのSpir URLを埋め込み）
+        if category == CATEGORY_VOICEMAIL:
+            caller_name = tasks[0].get("owner_name", "") if tasks else ""
+            c_last = caller_name.split()[0] if caller_name else SENDER_NAME
+            # SlackからAE振分結果を取得
+            ae_name = fetch_ae_from_slack(lead.get("email", ""))
+            ae_spir_url = get_ae_spir_url(ae_name)
+            ae_info = f"（AE: {ae_name}）" if ae_name else "（AE: 未特定・中嶋デフォルト）"
+            print(f"[INFO] 留守電テンプレート適用 {ae_info}")
+            analysis["email_subject"] = f"【先ほどのお電話のお礼】株式会社SalesNow {c_last}"
+            analysis["email_body"] = (
+                f"{lead['last_name']}様\n\n"
+                f"お世話になっております、株式会社SalesNowの{c_last}です。\n\n"
+                f"このたびはお問い合わせいただき、誠にありがとうございます。\n"
+                f"先ほどお電話いたしましたが、ご不在でしたのでメールにてご連絡いたします。\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"■ オンライン打ち合わせのご案内\n"
+                f"貴社のご状況に合わせたお話やデモをお見せしたいため、\n"
+                f"まずお話させていただけますと幸いです。\n\n"
+                f"▼ ご予約はこちら（オンライン）\n"
+                f"{ae_spir_url}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"■ 以下ご依頼になります。\n"
+                f"弊社側で準備をした上でお時間を迎える目的で、以下をご返信いただけますと幸いです（1分で回答できます）。\n\n"
+                f"① 最も解決したい課題はどれに近いですか？\n"
+                f"□ アプローチ先リストの作成・整備に時間がかかる\n"
+                f"□ ターゲット企業への接続率・通電率が低い\n"
+                f"□ アプローチの優先順位付けができていない\n"
+                f"□ 既存顧客の深耕・クロスセルの機会を逃している\n"
+                f"□ その他（　　　　　）\n\n"
+                f"② 企業データベースのご利用状況を教えてください\n"
+                f"□ 現在利用中（サービス名：　　　）\n"
+                f"□ 他社を検討中（サービス名：　　　）\n"
+                f"□ 過去に利用していた（サービス名：　　　）\n"
+                f"□ 利用経験なし\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"ご不明点がございましたら、このメールへの返信いただけますと幸いです。\n"
+                f"取り急ぎ用件のみで恐縮ですが、何卒宜しくお願い致します。"
+            )
 
         # 日程調整完了の場合はテンプレートで上書き
         if category == CATEGORY_APPOINTMENT:

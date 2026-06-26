@@ -33,15 +33,14 @@ jobs:
 
       - name: Authenticate Salesforce
         run: |
-          echo "----- diag -----"
-          node --version || true
-          sf version --verbose || true
-          echo "----- write authurl -----"
-          printf '%s' '${{ secrets.SFDX_AUTH_URL }}' > /tmp/authurl.txt
-          echo "authurl bytes: $(wc -c < /tmp/authurl.txt)"
-          echo "----- login -----"
-          sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default --json
-          rm /tmp/authurl.txt
+          printf '%s' '${{ secrets.SF_SERVER_KEY }}' > /tmp/server.key
+          sf org login jwt \
+            --client-id '${{ secrets.SF_CLIENT_ID }}' \
+            --jwt-key-file /tmp/server.key \
+            --username '${{ secrets.SF_USERNAME }}' \
+            --alias prod --set-default
+          rm /tmp/server.key
+          sf org display --target-org prod
 
       - name: Set up Gmail credentials
         run: |

@@ -8,6 +8,10 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    env:
+      # ヘッドレスCIではOSキーチェーン(libsecret/dbus)が無くsf CLIがハングし
+      # Node終了コード13(unsettled top-level await)で落ちるため、ファイル保存を強制する
+      SF_USE_GENERIC_UNIX_KEYCHAIN: "true"
     steps:
       - uses: actions/checkout@v4
 

@@ -27,20 +27,27 @@ jobs:
         run: |
           pip install slack_sdk google-auth google-api-python-client
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install Salesforce CLI
         run: |
           npm install -g @salesforce/cli
 
       - name: Authenticate Salesforce
         run: |
-          printf '%s' '${{ secrets.SF_SERVER_KEY }}' > /tmp/server.key
-          sf org login jwt \
-            --client-id '${{ secrets.SF_CLIENT_ID }}' \
-            --jwt-key-file /tmp/server.key \
-            --username '${{ secrets.SF_USERNAME }}' \
-            --alias prod --set-default
-          rm /tmp/server.key
-          sf org display --target-org prod
+          echo "----- diag -----"
+          node --version
+          sf version || true
+          echo "----- connectivity to login.salesforce.com -----"
+          curl -sS -o /dev/null -w "login.salesforce.com http=%{http_code} time=%{time_total}\n" --max-time 20 https://login.salesforce.com || echo "curl login FAILED rc=$?"
+          curl -sS -o /dev/null -w "salesnow-jp http=%{http_code} time=%{time_total}\n" --max-time 20 https://salesnow-jp.my.salesforce.com || echo "curl instance FAILED rc=$?"
+          echo "----- login (sfdx-url) -----"
+          printf '%s' '${{ secrets.SFDX_AUTH_URL }}' > /tmp/authurl.txt
+          sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default
+          rm /tmp/authurl.txt
 
       - name: Set up Gmail credentials
         run: |

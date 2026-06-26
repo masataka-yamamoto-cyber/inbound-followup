@@ -9,9 +9,12 @@ jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      # ヘッドレスCIではOSキーチェーン(libsecret/dbus)が無くsf CLIがハングし
-      # Node終了コード13(unsettled top-level await)で落ちるため、ファイル保存を強制する
+      # ヘッドレスCIでsf CLIがハングして Node 終了コード13
+      # (unsettled top-level await) で落ちるのを防ぐための堅牢化
       SF_USE_GENERIC_UNIX_KEYCHAIN: "true"
+      SF_DISABLE_TELEMETRY: "true"
+      SF_AUTOUPDATE_DISABLE: "true"
+      SF_DISABLE_AUTOUPDATE: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +33,14 @@ jobs:
 
       - name: Authenticate Salesforce
         run: |
-          echo "${{ secrets.SFDX_AUTH_URL }}" > /tmp/authurl.txt
-          sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default
+          echo "----- diag -----"
+          node --version || true
+          sf version --verbose || true
+          echo "----- write authurl -----"
+          printf '%s' '${{ secrets.SFDX_AUTH_URL }}' > /tmp/authurl.txt
+          echo "authurl bytes: $(wc -c < /tmp/authurl.txt)"
+          echo "----- login -----"
+          sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default --json
           rm /tmp/authurl.txt
 
       - name: Set up Gmail credentials

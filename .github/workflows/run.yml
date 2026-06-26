@@ -9,11 +9,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      # ヘッドレスCIでsf CLIがハングして Node 終了コード13
-      # (unsettled top-level await) で落ちるのを防ぐための堅牢化
-      SF_USE_GENERIC_UNIX_KEYCHAIN: "true"
       SF_DISABLE_TELEMETRY: "true"
-      SF_AUTOUPDATE_DISABLE: "true"
       SF_DISABLE_AUTOUPDATE: "true"
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +23,8 @@ jobs:
         run: |
           pip install slack_sdk google-auth google-api-python-client
 
+      # sf CLI はランナー既定の Node 22 上で起動直後にハングし
+      # Node 終了コード13 (unsettled top-level await) で落ちるため、Node 20 に固定する
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -38,13 +36,6 @@ jobs:
 
       - name: Authenticate Salesforce
         run: |
-          echo "----- diag -----"
-          node --version
-          sf version || true
-          echo "----- connectivity to login.salesforce.com -----"
-          curl -sS -o /dev/null -w "login.salesforce.com http=%{http_code} time=%{time_total}\n" --max-time 20 https://login.salesforce.com || echo "curl login FAILED rc=$?"
-          curl -sS -o /dev/null -w "salesnow-jp http=%{http_code} time=%{time_total}\n" --max-time 20 https://salesnow-jp.my.salesforce.com || echo "curl instance FAILED rc=$?"
-          echo "----- login (sfdx-url) -----"
           printf '%s' '${{ secrets.SFDX_AUTH_URL }}' > /tmp/authurl.txt
           sf org login sfdx-url --sfdx-url-file /tmp/authurl.txt --alias prod --set-default
           rm /tmp/authurl.txt

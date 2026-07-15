@@ -23,12 +23,13 @@ jobs:
         run: |
           pip install slack_sdk google-auth google-api-python-client
 
-      # sf CLI はランナー既定の Node 22 上で起動直後にハングし
-      # Node 終了コード13 (unsettled top-level await) で落ちるため、Node 20 に固定する
+      # 最新の @salesforce/cli 同梱 undici が Node 内部 API
+      # webidl.util.markAsUncloneable を要求するが、Node 20 には存在せず
+      # sf 起動直後に TypeError で落ちるため、これを含む Node 22 に固定する
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Salesforce CLI
         run: |
